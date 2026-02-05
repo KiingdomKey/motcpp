@@ -126,6 +126,7 @@ set(MOTCPP_SOURCES
     ${MOTCPP_SOURCE_DIR}/trackers/boosttrack.cpp
     ${MOTCPP_SOURCE_DIR}/trackers/hybridsort.cpp
     ${MOTCPP_SOURCE_DIR}/trackers/ucmc.cpp
+    ${MOTCPP_SOURCE_DIR}/trackers/oracletrack.cpp
     
     # Data
     ${MOTCPP_SOURCE_DIR}/data/mot17_dataset.cpp
@@ -159,6 +160,7 @@ set(MOTCPP_HEADERS
     ${MOTCPP_INCLUDE_DIR}/motcpp/trackers/boosttrack.hpp
     ${MOTCPP_INCLUDE_DIR}/motcpp/trackers/hybridsort.hpp
     ${MOTCPP_INCLUDE_DIR}/motcpp/trackers/ucmc.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/trackers/oracletrack.hpp
     ${MOTCPP_INCLUDE_DIR}/motcpp/data/mot17_dataset.hpp
 )
 

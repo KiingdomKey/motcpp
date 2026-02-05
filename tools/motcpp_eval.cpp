@@ -7,6 +7,7 @@
 #include <motcpp/trackers/botsort.hpp>
 #include <motcpp/trackers/boosttrack.hpp>
 #include <motcpp/trackers/hybridsort.hpp>
+#include <motcpp/trackers/oracletrack.hpp>
 #include <motcpp/data/mot17_dataset.hpp>
 #include <motcpp/utils/mot_format.hpp>
 #include <opencv2/opencv.hpp>
@@ -314,9 +315,18 @@ int main(int argc, char* argv[]) {
                     "ecc",         // cmc_method
                     !reid_weights.empty()  // with_reid
                 );
+            } else if (tracking_method == "oracletrack") {
+                // OracleTrack - Novel tracker with proper Kalman filtering + cascaded association
+                tracker = std::make_unique<motcpp::trackers::OracleTrack>(
+                    0.3f,   // det_thresh
+                    30,     // max_age (optimal for track recovery)
+                    3,      // min_hits (standard: require 3 hits before output)
+                    9.21f,  // gating_threshold (not used with IoU matching)
+                    4.0f    // max_mahalanobis (not used with IoU matching)
+                );
             } else {
                 std::cerr << "Unknown tracking method: " << tracking_method << "\n";
-                std::cerr << "Supported methods: sort, ucmc, bytetrack, ocsort, deepocsort, strongsort, botsort, boosttrack, hybridsort\n";
+                std::cerr << "Supported methods: sort, ucmc, bytetrack, ocsort, deepocsort, strongsort, botsort, boosttrack, hybridsort, oracletrack\n";
                 return 1;
             }
             

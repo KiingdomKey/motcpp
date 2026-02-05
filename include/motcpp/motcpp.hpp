@@ -34,6 +34,7 @@
 #include <motcpp/trackers/boosttrack.hpp>
 #include <motcpp/trackers/hybridsort.hpp>
 #include <motcpp/trackers/ucmc.hpp>
+#include <motcpp/trackers/oracletrack.hpp>
 
 namespace motcpp {
 
