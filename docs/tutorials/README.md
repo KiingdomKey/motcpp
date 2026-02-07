@@ -117,8 +117,12 @@ Add appearance features for better re-identification.
 ### Download ReID Model
 
 ```bash
-# Download OSNet model
-wget https://github.com/Geekgineer/motcpp/releases/download/v1.0/osnet_x1_0.onnx
+# Download OSNet model (PyTorch format)
+wget https://github.com/Geekgineer/motcpp/releases/download/reid-models-v1.0.0/osnet_x1_0_dukemtmcreid.pt
+
+# Convert to ONNX format (required for motcpp)
+python3 scripts/export_reid_onnx.py --model osnet_x1_0_dukemtmcreid --output-dir .
+# This will create osnet_x1_0_dukemtmcreid.onnx in the current directory
 ```
 
 ### Create ReID Tracker
@@ -128,7 +132,7 @@ wget https://github.com/Geekgineer/motcpp/releases/download/v1.0/osnet_x1_0.onnx
 
 // StrongSORT with ReID
 motcpp::trackers::StrongSORT tracker(
-    "osnet_x1_0.onnx",  // ReID model path
+    "osnet_x1_0_dukemtmcreid.onnx",  // ReID model path (after conversion from .pt)
     false,              // use_half (FP16)
     false,              // use_gpu
     0.3f,               // det_thresh
