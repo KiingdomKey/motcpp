@@ -384,6 +384,13 @@ Eigen::MatrixXf ByteTrack::update(const Eigen::MatrixXf& dets,
         }
     }
     
+    // All unmatched by default, narrowed down inside the if block
+    std::vector<int> u_track2;
+    u_track2.reserve(r_tracked_stracks_ptrs.size());
+    for (size_t i = 0; i < r_tracked_stracks_ptrs.size(); ++i) {
+        u_track2.push_back(static_cast<int>(i));
+    }
+
     if (!detections_second.empty() && !r_tracked_stracks_ptrs.empty()) {
         Eigen::MatrixXf r_track_xyxy(r_tracked_stracks_ptrs.size(), 4);
         Eigen::MatrixXf det2_xyxy(detections_second.size(), 4);
@@ -397,7 +404,6 @@ Eigen::MatrixXf ByteTrack::update(const Eigen::MatrixXf& dets,
         Eigen::MatrixXf dists2 = utils::iou_distance(r_track_xyxy, det2_xyxy);
         auto assignment2 = utils::linear_assignment(dists2, 0.5f);
         
-        std::vector<int> u_track2, u_detection2;
         for (size_t i = 0; i < r_tracked_stracks_ptrs.size(); ++i) {
             bool matched = false;
             for (const auto& match : assignment2.matches) {
@@ -405,14 +411,16 @@ Eigen::MatrixXf ByteTrack::update(const Eigen::MatrixXf& dets,
             }
             if (!matched) u_track2.push_back(i);
         }
-        for (size_t i = 0; i < detections_second.size(); ++i) {
+        
+        u_track2.clear();
+        for (size_t i = 0; i < r_tracked_stracks_ptrs.size(); ++i) {
             bool matched = false;
             for (const auto& match : assignment2.matches) {
-                if (match[1] == static_cast<int>(i)) matched = true;
+                if (match[0] == static_cast<int>(i)) matched = true;
             }
-            if (!matched) u_detection2.push_back(i);
+            if (!matched) u_track2.push_back(static_cast<int>(i));
         }
-        
+
         for (const auto& match : assignment2.matches) {
             int itracked = match[0];
             int idet = match[1];
@@ -431,13 +439,14 @@ Eigen::MatrixXf ByteTrack::update(const Eigen::MatrixXf& dets,
                 refind_stracks.push_back(*track);
             }
         }
-        
-        for (int idx : u_track2) {
-            STrack* track = r_tracked_stracks_ptrs[idx];
-            if (track->state() != ByteTrackState::Lost) {
-                track->mark_lost();
-                lost_stracks_new.push_back(*track);
-            }
+    }
+
+    // Mark remaining unmatched tracks as lost regardless of second stage detections
+    for (int idx : u_track2) {
+        STrack* track = r_tracked_stracks_ptrs[idx];
+        if (track->state() != ByteTrackState::Lost) {
+            track->mark_lost();
+            lost_stracks_new.push_back(*track);
         }
     }
     
