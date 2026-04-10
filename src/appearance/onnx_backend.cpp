@@ -29,15 +29,16 @@ ONNXBackend::ONNXBackend(const std::string& model_path,
     : ReIDBackend()
     , env_(ORT_LOGGING_LEVEL_WARNING, "motcppReID")
     , max_batch_size_(32)  // Pre-allocate for up to 32 crops
-    , model_path_(model_path)
+    #ifdef _WIN32
+        , model_path_(to_wstring(model_path))
+    #else
+        , model_path_(model_path)
+    #endif
+    , model_name_(model_name.empty() ? model_path : model_name)
+    , use_gpu_(use_gpu)
     , model_name_(model_name.empty() ? model_path : model_name)
     , use_gpu_(use_gpu)
 {
-    #ifdef _WIN32
-        model_path_ = to_wstring(model_path);
-    #else
-        model_path_ = model_path;
-    #endif
     // Determine input shape and normalization from model name
     input_shape_ = determine_input_shape(model_name_);
     auto [mean, std] = determine_normalization(model_name_);
