@@ -34,7 +34,6 @@ ONNXBackend::ONNXBackend(const std::string& model_path,
     #else
         , model_path_(model_path)
     #endif
-    , use_gpu_(use_gpu)
     , model_name_(model_name.empty() ? model_path : model_name)
     , use_gpu_(use_gpu)
 {
