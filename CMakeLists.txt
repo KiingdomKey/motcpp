@@ -1,214 +1,338 @@
-# 3.5 is actually available almost everywhere.
-# 3.30 as the upper policy limit avoids CMake deprecation warnings.
-cmake_minimum_required(VERSION 3.5...3.30)
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 motcpp contributors
 
-# enable MSVC_RUNTIME_LIBRARY target property
-# see https://cmake.org/cmake/help/latest/policy/CMP0091.html
-if(POLICY CMP0091)
-  cmake_policy(SET CMP0091 NEW)
+cmake_minimum_required(VERSION 3.20)
+
+# Extract version from version.hpp
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/include/motcpp/version.hpp" VERSION_FILE)
+string(REGEX MATCH "MOTCPP_VERSION_MAJOR ([0-9]+)" _ ${VERSION_FILE})
+set(VERSION_MAJOR ${CMAKE_MATCH_1})
+string(REGEX MATCH "MOTCPP_VERSION_MINOR ([0-9]+)" _ ${VERSION_FILE})
+set(VERSION_MINOR ${CMAKE_MATCH_1})
+string(REGEX MATCH "MOTCPP_VERSION_PATCH ([0-9]+)" _ ${VERSION_FILE})
+set(VERSION_PATCH ${CMAKE_MATCH_1})
+
+project(motcpp
+    VERSION ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}
+    DESCRIPTION "Modern C++ Multi-Object Tracking Library"
+    HOMEPAGE_URL "https://github.com/Geekgineer/motcpp"
+    LANGUAGES CXX
+)
+
+# ============================================================================
+# Build Options
+# ============================================================================
+option(MOTCPP_BUILD_TESTS "Build unit tests" ON)
+option(MOTCPP_BUILD_BENCHMARKS "Build benchmarks" OFF)
+option(MOTCPP_BUILD_EXAMPLES "Build examples" ON)
+option(MOTCPP_BUILD_TOOLS "Build command-line tools" ON)
+option(MOTCPP_ENABLE_ONNX "Enable ONNX Runtime for ReID" ON)
+option(MOTCPP_INSTALL "Generate install target" ON)
+option(MOTCPP_COVERAGE "Enable code coverage" OFF)
+option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
+
+# ============================================================================
+# C++ Standard
+# ============================================================================
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# Build type
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type" FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
+        "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
 
-project(YAML_CPP VERSION 0.9.0 LANGUAGES CXX)
+message(STATUS "")
+message(STATUS "========================================")
+message(STATUS "  motcpp v${PROJECT_VERSION}")
+message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "========================================")
+message(STATUS "")
 
-set(YAML_CPP_MAIN_PROJECT OFF)
-if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
-  set(YAML_CPP_MAIN_PROJECT ON)
+# ============================================================================
+# Dependencies
+# ============================================================================
+find_package(OpenCV REQUIRED)
+
+# Eigen3 - accept version 3.3+ or 5.x (Eigen changed versioning scheme)
+find_package(Eigen3 CONFIG REQUIRED)
+if(NOT Eigen3_FOUND)
+    find_package(Eigen3 REQUIRED NO_MODULE)
 endif()
 
-include(CMakePackageConfigHelpers)
-include(CMakeDependentOption)
-include(CheckCXXCompilerFlag)
-include(GNUInstallDirs)
-include(CTest)
+# yaml-cpp - try new target first, fallback to old
 
-option(YAML_CPP_BUILD_CONTRIB "Enable yaml-cpp contrib in library" ON)
-option(YAML_CPP_BUILD_TOOLS "Enable parse tools" ON)
-option(YAML_BUILD_SHARED_LIBS "Build yaml-cpp shared library" ${BUILD_SHARED_LIBS})
-option(YAML_CPP_INSTALL "Enable generation of yaml-cpp install targets" ${YAML_CPP_MAIN_PROJECT})
-option(YAML_CPP_FORMAT_SOURCE "Format source" ${YAML_CPP_MAIN_PROJECT})
-option(YAML_CPP_DISABLE_UNINSTALL  "Disable uninstallation of yaml-cpp" OFF)
-option(YAML_USE_SYSTEM_GTEST "Use system googletest if found" OFF)
-option(YAML_ENABLE_PIC "Use Position-Independent Code " ON)
+include(FetchContent)
+FetchContent_Declare(
+    yaml-cpp
+    GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
+)
+FetchContent_MakeAvailable(yaml-cpp)
 
-cmake_dependent_option(YAML_CPP_BUILD_TESTS
-  "Enable yaml-cpp tests" OFF
-  "BUILD_TESTING;YAML_CPP_MAIN_PROJECT" OFF)
-cmake_dependent_option(YAML_MSVC_SHARED_RT
-  "MSVC: Build yaml-cpp with shared runtime libs (/MD)" ON
-  "CMAKE_SYSTEM_NAME MATCHES Windows" OFF)
-set(YAML_CPP_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/yaml-cpp"
-  CACHE STRING "Path to install the CMake package to")
- 
-if (YAML_CPP_FORMAT_SOURCE)
-    find_program(YAML_CPP_CLANG_FORMAT_EXE NAMES clang-format)
-endif()
-
-if (YAML_BUILD_SHARED_LIBS)
-  set(yaml-cpp-type SHARED)
-  set(yaml-cpp-label-postfix "shared")
+if(TARGET yaml-cpp::yaml-cpp)
+    set(YAML_CPP_TARGET yaml-cpp::yaml-cpp)
+elseif(TARGET yaml-cpp)
+    set(YAML_CPP_TARGET yaml-cpp)
 else()
-  set(yaml-cpp-type STATIC)
-  set(yaml-cpp-label-postfix "static")
+    message(FATAL_ERROR "yaml-cpp target not found")
 endif()
 
-set(build-shared $<BOOL:${YAML_BUILD_SHARED_LIBS}>)
-set(build-windows-dll $<AND:$<BOOL:${CMAKE_HOST_WIN32}>,${build-shared}>)
-set(msvc-shared_rt $<BOOL:${YAML_MSVC_SHARED_RT}>)
-
-set(print-warnings $<NOT:$<OR:$<CXX_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:NVHPC>>>)
-
-if (NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY)
-  set(CMAKE_MSVC_RUNTIME_LIBRARY
-    MultiThreaded$<$<CONFIG:Debug>:Debug>$<${msvc-shared_rt}:DLL>)
+# Optional: ONNX Runtime for ReID models
+if(MOTCPP_ENABLE_ONNX)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/DownloadONNXRuntime.cmake)
 endif()
 
-set(contrib-pattern "src/contrib/*.cpp")
-set(src-pattern "src/*.cpp")
-if (CMAKE_VERSION VERSION_GREATER 3.12)
-  list(INSERT contrib-pattern 0 CONFIGURE_DEPENDS)
-  list(INSERT src-pattern 0 CONFIGURE_DEPENDS)
+# Optional: spdlog for logging
+find_package(spdlog QUIET)
+if(spdlog_FOUND)
+    message(STATUS "Found spdlog: logging enabled")
+else()
+    message(STATUS "spdlog not found: logging disabled")
 endif()
 
-file(GLOB yaml-cpp-contrib-sources ${contrib-pattern})
-file(GLOB yaml-cpp-sources ${src-pattern})
+# ============================================================================
+# Source Files
+# ============================================================================
+set(MOTCPP_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
+set(MOTCPP_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-set(msvc-rt $<TARGET_PROPERTY:MSVC_RUNTIME_LIBRARY>)
+set(MOTCPP_SOURCES
+    # Core
+    ${MOTCPP_SOURCE_DIR}/config.cpp
+    ${MOTCPP_SOURCE_DIR}/tracker.cpp
+    
+    # Utils
+    ${MOTCPP_SOURCE_DIR}/utils/ops.cpp
+    ${MOTCPP_SOURCE_DIR}/utils/iou.cpp
+    ${MOTCPP_SOURCE_DIR}/utils/association.cpp
+    ${MOTCPP_SOURCE_DIR}/utils/matching.cpp
+    
+    # Motion models
+    ${MOTCPP_SOURCE_DIR}/motion/kalman_filter.cpp
+    ${MOTCPP_SOURCE_DIR}/motion/kalman_filters/xyah_kf.cpp
+    ${MOTCPP_SOURCE_DIR}/motion/kalman_filters/xysr_kf.cpp
+    ${MOTCPP_SOURCE_DIR}/motion/cmc/cmc.cpp
+    ${MOTCPP_SOURCE_DIR}/motion/cmc/sof.cpp
+    ${MOTCPP_SOURCE_DIR}/motion/cmc/ecc.cpp
+    
+    # Appearance (ReID)
+    ${MOTCPP_SOURCE_DIR}/appearance/reid_backend.cpp
+    ${MOTCPP_SOURCE_DIR}/appearance/onnx_backend.cpp
+    
+    # Trackers
+    ${MOTCPP_SOURCE_DIR}/trackers/sort.cpp
+    ${MOTCPP_SOURCE_DIR}/trackers/bytetrack.cpp
+    ${MOTCPP_SOURCE_DIR}/trackers/ocsort.cpp
+    ${MOTCPP_SOURCE_DIR}/trackers/deepocsort.cpp
+    ${MOTCPP_SOURCE_DIR}/trackers/strongsort.cpp
+    ${MOTCPP_SOURCE_DIR}/trackers/botsort.cpp
+    ${MOTCPP_SOURCE_DIR}/trackers/boosttrack.cpp
+    ${MOTCPP_SOURCE_DIR}/trackers/hybridsort.cpp
+    ${MOTCPP_SOURCE_DIR}/trackers/ucmc.cpp
+    ${MOTCPP_SOURCE_DIR}/trackers/oracletrack.cpp
+    
+    # Data
+    ${MOTCPP_SOURCE_DIR}/data/mot17_dataset.cpp
+)
 
-set(msvc-rt-mtd-static $<STREQUAL:${msvc-rt},MultiThreadedDebug>)
-set(msvc-rt-mt-static $<STREQUAL:${msvc-rt},MultiThreaded>)
+set(MOTCPP_HEADERS
+    ${MOTCPP_INCLUDE_DIR}/motcpp/motcpp.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/version.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/tracker.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/config.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/utils/ops.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/utils/iou.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/utils/association.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/utils/matching.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/utils/mot_format.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/motion/kalman_filter.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/motion/kalman_filters/xyah_kf.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/motion/kalman_filters/xysr_kf.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/motion/kalman_filters/xywh_kf.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/motion/cmc/cmc.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/motion/cmc/sof.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/motion/cmc/ecc.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/appearance/reid_backend.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/appearance/onnx_backend.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/trackers/sort.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/trackers/bytetrack.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/trackers/ocsort.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/trackers/deepocsort.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/trackers/strongsort.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/trackers/botsort.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/trackers/boosttrack.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/trackers/hybridsort.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/trackers/ucmc.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/trackers/oracletrack.hpp
+    ${MOTCPP_INCLUDE_DIR}/motcpp/data/mot17_dataset.hpp
+)
 
-set(msvc-rt-mtd-dll $<STREQUAL:${msvc-rt},MultiThreadedDebugDLL>)
-set(msvc-rt-mt-dll $<STREQUAL:${msvc-rt},MultiThreadedDLL>)
+# ============================================================================
+# Library Target
+# ============================================================================
+add_library(motcpp ${MOTCPP_SOURCES} ${MOTCPP_HEADERS})
+add_library(motcpp::motcpp ALIAS motcpp)
 
-set(backport-msvc-runtime $<VERSION_LESS:${CMAKE_VERSION},3.15>)
+target_include_directories(motcpp
+    PUBLIC
+        $<BUILD_INTERFACE:${MOTCPP_INCLUDE_DIR}>
+        $<INSTALL_INTERFACE:include>
+)
 
-add_library(yaml-cpp ${yaml-cpp-type} "")
-add_library(yaml-cpp::yaml-cpp ALIAS yaml-cpp)
-
-set_property(TARGET yaml-cpp
-  PROPERTY
-    MSVC_RUNTIME_LIBRARY ${CMAKE_MSVC_RUNTIME_LIBRARY})
-set_property(TARGET yaml-cpp
-  PROPERTY
-    CXX_STANDARD_REQUIRED ON)
-
-if (NOT YAML_BUILD_SHARED_LIBS)
-      set_property(TARGET yaml-cpp PROPERTY POSITION_INDEPENDENT_CODE ${YAML_ENABLE_PIC})
+# Link dependencies
+# OpenCV must be PUBLIC as it's used in public headers
+# Eigen3 must be PUBLIC as it's used in public headers
+# Use OpenCV target if available (handles paths correctly), otherwise use legacy variables
+if(TARGET opencv_core)
+    # Check if opencv_video and opencv_calib3d targets exist before linking
+    set(OPENCV_LINK_LIBS opencv_core opencv_imgproc opencv_imgcodecs)
+    
+    if(TARGET opencv_video)
+        list(APPEND OPENCV_LINK_LIBS opencv_video)
+    endif()
+    
+    if(TARGET opencv_calib3d)
+        list(APPEND OPENCV_LINK_LIBS opencv_calib3d)
+    endif()
+    
+    target_link_libraries(motcpp
+        PUBLIC
+            ${OPENCV_LINK_LIBS}
+            Eigen3::Eigen
+            ${YAML_CPP_TARGET}
+    )
+else()
+    target_link_libraries(motcpp
+        PUBLIC
+            ${OpenCV_LIBS}
+            Eigen3::Eigen
+            ${YAML_CPP_TARGET}
+    )
 endif()
 
-target_include_directories(yaml-cpp
-  PUBLIC
-    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
-  PRIVATE
-    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>)
-
-if (NOT DEFINED CMAKE_CXX_STANDARD)
-  set_target_properties(yaml-cpp
-    PROPERTIES
-      CXX_STANDARD 11)
+# ONNX Runtime (optional)
+if(MOTCPP_ENABLE_ONNX AND ONNXRUNTIME_FOUND)
+    target_compile_definitions(motcpp PUBLIC MOTCPP_HAS_ONNX=1)
+    target_link_libraries(motcpp PRIVATE ${ONNXRUNTIME_LIBRARY})
+    target_include_directories(motcpp PRIVATE ${ONNXRUNTIME_INCLUDE_DIR})
+    
+    # RPATH for runtime linking
+    if(NOT WIN32)
+        get_filename_component(ONNXRUNTIME_LIB_DIR "${ONNXRUNTIME_LIBRARY}" DIRECTORY)
+        set_target_properties(motcpp PROPERTIES
+            INSTALL_RPATH "${ONNXRUNTIME_LIB_DIR}"
+            BUILD_WITH_INSTALL_RPATH TRUE
+        )
+    endif()
 endif()
 
-if(YAML_CPP_MAIN_PROJECT)
-  target_compile_options(yaml-cpp
-    PRIVATE
-      $<${print-warnings}:-Wall -Wextra -Wshadow -Weffc++ -Wno-long-long>
-      $<${print-warnings}:-pedantic -pedantic-errors>)
+# spdlog (optional)
+if(spdlog_FOUND)
+    target_link_libraries(motcpp PUBLIC spdlog::spdlog)
+    target_compile_definitions(motcpp PUBLIC MOTCPP_HAS_SPDLOG=1)
 endif()
 
-target_compile_options(yaml-cpp
-  PRIVATE
-    $<$<AND:${backport-msvc-runtime},${msvc-rt-mtd-static}>:-MTd>
-    $<$<AND:${backport-msvc-runtime},${msvc-rt-mt-static}>:-MT>
-    $<$<AND:${backport-msvc-runtime},${msvc-rt-mtd-dll}>:-MDd>
-    $<$<AND:${backport-msvc-runtime},${msvc-rt-mt-dll}>:-MD>
-
-    # /wd4127 = disable warning C4127 "conditional expression is constant"
-    # http://msdn.microsoft.com/en-us/library/6t66728h.aspx
-    # /wd4355 = disable warning C4355 "'this' : used in base member initializer list
-    # http://msdn.microsoft.com/en-us/library/3c594ae3.aspx
-    $<$<CXX_COMPILER_ID:MSVC>:/W3 /wd4127 /wd4355>)
-
-target_compile_definitions(yaml-cpp
-  PUBLIC
-    $<$<NOT:$<BOOL:${YAML_BUILD_SHARED_LIBS}>>:YAML_CPP_STATIC_DEFINE>
-  PRIVATE
-    $<${build-windows-dll}:${PROJECT_NAME}_DLL>
-    $<$<NOT:$<BOOL:${YAML_CPP_BUILD_CONTRIB}>>:YAML_CPP_NO_CONTRIB>)
-
-target_sources(yaml-cpp
-  PRIVATE
-    $<$<BOOL:${YAML_CPP_BUILD_CONTRIB}>:${yaml-cpp-contrib-sources}>
-    ${yaml-cpp-sources})
-
-if (NOT DEFINED CMAKE_DEBUG_POSTFIX)
-  set(CMAKE_DEBUG_POSTFIX "d")
+# Compiler options
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(motcpp PRIVATE
+        -Wall -Wextra -Wpedantic
+        $<$<CONFIG:Release>:-O2>
+        $<$<CONFIG:Debug>:-g -O0>
+    )
+    
+    if(MOTCPP_COVERAGE)
+        target_compile_options(motcpp PRIVATE --coverage)
+        target_link_options(motcpp PRIVATE --coverage)
+        # Explicitly link gcov library for coverage support
+        target_link_libraries(motcpp PRIVATE gcov)
+    endif()
+elseif(MSVC)
+    target_compile_options(motcpp PRIVATE /W4 /permissive-)
 endif()
 
-set_target_properties(yaml-cpp PROPERTIES
-  VERSION "${PROJECT_VERSION}"
-  SOVERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}"
-  PROJECT_LABEL "yaml-cpp ${yaml-cpp-label-postfix}"
-  DEBUG_POSTFIX "${CMAKE_DEBUG_POSTFIX}")
-
-set(EXPORT_TARGETS yaml-cpp::yaml-cpp)
-configure_package_config_file(
-  "${PROJECT_SOURCE_DIR}/yaml-cpp-config.cmake.in"
-  "${PROJECT_BINARY_DIR}/yaml-cpp-config.cmake"
-  INSTALL_DESTINATION "${YAML_CPP_INSTALL_CMAKEDIR}"
-  PATH_VARS CMAKE_INSTALL_INCLUDEDIR CMAKE_INSTALL_LIBDIR)
-unset(EXPORT_TARGETS)
-
-write_basic_package_version_file(
-  "${PROJECT_BINARY_DIR}/yaml-cpp-config-version.cmake"
-  COMPATIBILITY AnyNewerVersion)
-
-configure_file(yaml-cpp.pc.in yaml-cpp.pc @ONLY)
-
-if (YAML_CPP_INSTALL)
-  install(TARGETS yaml-cpp
-    EXPORT yaml-cpp-targets
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
-  install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-                FILES_MATCHING PATTERN "*.h")
-  install(EXPORT yaml-cpp-targets
-    NAMESPACE yaml-cpp::
-    DESTINATION "${YAML_CPP_INSTALL_CMAKEDIR}")
-  install(FILES
-      "${PROJECT_BINARY_DIR}/yaml-cpp-config.cmake"
-      "${PROJECT_BINARY_DIR}/yaml-cpp-config-version.cmake"
-    DESTINATION "${YAML_CPP_INSTALL_CMAKEDIR}")
-  install(FILES "${PROJECT_BINARY_DIR}/yaml-cpp.pc"
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+# ============================================================================
+# Tools
+# ============================================================================
+if(MOTCPP_BUILD_TOOLS)
+    add_subdirectory(tools)
 endif()
 
-if(YAML_CPP_BUILD_TESTS)
-  add_subdirectory(test)
+# ============================================================================
+# Examples
+# ============================================================================
+if(MOTCPP_BUILD_EXAMPLES)
+    add_subdirectory(examples)
 endif()
 
-if(YAML_CPP_BUILD_TOOLS)
-  add_subdirectory(util)
+# ============================================================================
+# Testing
+# ============================================================================
+if(MOTCPP_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
 endif()
 
-if (YAML_CPP_FORMAT_SOURCE AND YAML_CPP_CLANG_FORMAT_EXE)
-  add_custom_target(format
-    COMMAND clang-format --style=file -i $<TARGET_PROPERTY:yaml-cpp,SOURCES>
-    COMMAND_EXPAND_LISTS
-    COMMENT "Running clang-format"
-    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
-    VERBATIM)
+# ============================================================================
+# Installation
+# ============================================================================
+if(MOTCPP_INSTALL)
+    include(GNUInstallDirs)
+    include(CMakePackageConfigHelpers)
+    
+    # Install library
+    install(TARGETS motcpp
+        EXPORT motcppTargets
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+    
+    # Install headers
+    install(DIRECTORY ${MOTCPP_INCLUDE_DIR}/motcpp
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    )
+    
+    # Export targets
+    install(EXPORT motcppTargets
+        FILE motcppTargets.cmake
+        NAMESPACE motcpp::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/motcpp
+    )
+    
+    # Package config
+    configure_package_config_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/motcppConfig.cmake.in
+        ${CMAKE_CURRENT_BINARY_DIR}/motcppConfig.cmake
+        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/motcpp
+    )
+    
+    write_basic_package_version_file(
+        ${CMAKE_CURRENT_BINARY_DIR}/motcppConfigVersion.cmake
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMajorVersion
+    )
+    
+    install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/motcppConfig.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/motcppConfigVersion.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/motcpp
+    )
 endif()
 
-# uninstall target
-if(YAML_CPP_INSTALL AND NOT YAML_CPP_DISABLE_UNINSTALL AND NOT TARGET uninstall)
-  configure_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake_uninstall.cmake.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
-    IMMEDIATE @ONLY)
-
-  add_custom_target(uninstall
-    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
-endif()
+# ============================================================================
+# Summary
+# ============================================================================
+message(STATUS "")
+message(STATUS "Configuration Summary:")
+message(STATUS "  Build tests:      ${MOTCPP_BUILD_TESTS}")
+message(STATUS "  Build benchmarks: ${MOTCPP_BUILD_BENCHMARKS}")
+message(STATUS "  Build examples:   ${MOTCPP_BUILD_EXAMPLES}")
+message(STATUS "  Build tools:      ${MOTCPP_BUILD_TOOLS}")
+message(STATUS "  ONNX Runtime:     ${MOTCPP_ENABLE_ONNX}")
+message(STATUS "  OpenCV:           ${OpenCV_VERSION}")
+message(STATUS "  Eigen3:           ${Eigen3_VERSION}")
+message(STATUS "")
