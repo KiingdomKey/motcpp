@@ -38,7 +38,6 @@ ONNXBackend::ONNXBackend(const std::string& model_path,
     #else
         model_path_ = model_path;
     #endif
-    }
     // Determine input shape and normalization from model name
     input_shape_ = determine_input_shape(model_name_);
     auto [mean, std] = determine_normalization(model_name_);
