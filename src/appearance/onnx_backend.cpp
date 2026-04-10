@@ -14,6 +14,12 @@ using ort_string_t = std::wstring;
 using ort_string_t = std::string;
 #endif
 
+#ifdef _WIN32
+static std::wstring to_wstring(const std::string& str) {
+    return std::wstring(str.begin(), str.end());
+}
+#endif
+
 namespace motcpp::appearance {
 
 ONNXBackend::ONNXBackend(const std::string& model_path,
@@ -27,20 +33,6 @@ ONNXBackend::ONNXBackend(const std::string& model_path,
     , model_name_(model_name.empty() ? model_path : model_name)
     , use_gpu_(use_gpu)
 {
-
-    #ifdef _WIN32
-    static std::wstring to_wstring(const std::string& str) {
-        return std::wstring(str.begin(), str.end());
-    }
-    #endif
-    
-    ONNXBackend::ONNXBackend(const std::string& model_path,
-                             const std::string& model_name,
-                             bool use_half,
-                             bool use_gpu)
-        : model_name_(model_name),
-          use_gpu_(use_gpu)
-    {
     #ifdef _WIN32
         model_path_ = to_wstring(model_path);
     #else
