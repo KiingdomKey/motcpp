@@ -11,6 +11,12 @@
 #include <onnxruntime_cxx_api.h>
 #endif
 
+#ifdef _WIN32
+using ort_string_t = std::wstring;
+#else
+using ort_string_t = std::string;
+#endif
+
 namespace motcpp::appearance {
 
 /**
@@ -99,7 +105,7 @@ private:
     }
 #endif
 
-    std::string model_path_;
+    ort_string_t model_path_;
     std::string model_name_;
     bool use_gpu_;
 };
