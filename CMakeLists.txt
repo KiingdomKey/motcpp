@@ -65,7 +65,14 @@ if(NOT Eigen3_FOUND)
 endif()
 
 # yaml-cpp - try new target first, fallback to old
-find_package(yaml-cpp REQUIRED)
+
+include(FetchContent)
+FetchContent_Declare(
+    yaml-cpp
+    GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
+)
+FetchContent_MakeAvailable(yaml-cpp)
+
 if(TARGET yaml-cpp::yaml-cpp)
     set(YAML_CPP_TARGET yaml-cpp::yaml-cpp)
 elseif(TARGET yaml-cpp)
