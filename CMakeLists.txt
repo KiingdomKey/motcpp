@@ -59,15 +59,12 @@ message(STATUS "")
 find_package(OpenCV REQUIRED)
 
 # Eigen3 - accept version 3.3+ or 5.x (Eigen changed versioning scheme)
-find_package(Eigen3 CONFIG REQUIRED)
-if(NOT Eigen3_FOUND)
-    FetchContent_Declare(
-        Eigen3
-        GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
-        GIT_TAG master
-    )
-    FetchContent_MakeAvailable(Eigen3)
-endif()
+FetchContent_Declare(
+    Eigen3
+    GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+    GIT_TAG master
+)
+FetchContent_MakeAvailable(Eigen3)
 
 # yaml-cpp - try new target first, fallback to old
 
